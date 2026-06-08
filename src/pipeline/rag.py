@@ -1,6 +1,6 @@
 """RAG pipeline — chunk, embed, index, retrieve, generate.
 
-Configuração: GROQ para LLM + OpenAI para embeddings.
+Configuração: GROQ para LLM + sentence-transformers para embeddings (100% gratuito).
 """
 
 from __future__ import annotations
@@ -12,44 +12,64 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+from chromadb import EmbeddingFunction, Documents, Embeddings
 from openai import OpenAI
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
 
 
-def _make_client() -> tuple[OpenAI, OpenAI, str | None]:
-    """
-    Retorna (llm_client, embed_client, embed_api_base).
-    - GROQ para LLM (llama-3.3-70b-versatile)
-    - OpenAI para embeddings (text-embedding-3-small)
-    """
-    # Cliente GROQ para LLM
-    if "GROQ_API_KEY" in os.environ:
-        llm_client = OpenAI(
-            api_key=os.environ["GROQ_API_KEY"],
-            base_url="https://api.groq.com/openai/v1",
-        )
-        print("🚀 GROQ configurado para LLM")
-    else:
-        raise RuntimeError("GROQ_API_KEY não configurada. Adicione no .env ou Streamlit Secrets.")
+# ============================================================================
+# Embedding Function customizada usando sentence-transformers (100% local)
+# ============================================================================
+class LocalEmbeddingFunction(EmbeddingFunction[Documents]):
+    """Embedding function local usando sentence-transformers.
     
-    # Cliente OpenAI para embeddings
-    if "OPENAI_API_KEY" in os.environ:
-        embed_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        embed_api_base = None
-        print("🤖 OpenAI configurado para embeddings")
-    elif "GEMINI_API_KEY" in os.environ:
-        embed_client = OpenAI(
-            api_key=os.environ["GEMINI_API_KEY"],
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        )
-        embed_api_base = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        print("💎 Gemini configurado para embeddings (fallback)")
-    else:
-        raise RuntimeError("OPENAI_API_KEY ou GEMINI_API_KEY necessária para embeddings.")
+    Usa modelo multilíngue que funciona bem para português.
+    Roda 100% no servidor, sem API externa, sem custo.
+    """
     
-    return llm_client, embed_client, embed_api_base
+    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
+        self.model_name = model_name
+        self._model = None
+    
+    def _load_model(self) -> SentenceTransformer:
+        """Lazy load do modelo (só carrega quando necessário)."""
+        if self._model is None:
+            print(f"📥 Carregando modelo de embeddings: {self.model_name}...")
+            self._model = SentenceTransformer(self.model_name)
+            print(f"✅ Modelo carregado com sucesso!")
+        return self._model
+    
+    def __call__(self, input: Documents) -> Embeddings:
+        """Gera embeddings para uma lista de textos."""
+        model = self._load_model()
+        embeddings = model.encode(
+            input,
+            convert_to_numpy=True,
+            normalize_embeddings=True,  # Normaliza para cosine similarity
+            show_progress_bar=False,
+        )
+        return embeddings.tolist()
+
+
+# ============================================================================
+# Cliente GROQ para LLM
+# ============================================================================
+def _make_llm_client() -> OpenAI:
+    """Inicializa cliente GROQ para LLM."""
+    if "GROQ_API_KEY" not in os.environ:
+        raise RuntimeError(
+            "GROQ_API_KEY não configurada. "
+            "Obtenha em https://console.groq.com/keys e adicione no Streamlit Secrets."
+        )
+    
+    client = OpenAI(
+        api_key=os.environ["GROQ_API_KEY"],
+        base_url="https://api.groq.com/openai/v1",
+    )
+    print("🚀 GROQ configurado para LLM (llama-3.3-70b-versatile)")
+    return client
 
 
 def _clean_text(text: str) -> str:
@@ -59,8 +79,11 @@ def _clean_text(text: str) -> str:
     return text
 
 
+# ============================================================================
+# Pipeline RAG
+# ============================================================================
 class RAGPipeline:
-    """Pipeline RAG end-to-end com Chroma local."""
+    """Pipeline RAG end-to-end com Chroma local + embeddings locais."""
 
     def __init__(
         self,
@@ -70,21 +93,15 @@ class RAGPipeline:
         llm_model: str | None = None,
         embed_model: str | None = None,
     ) -> None:
-        self.llm_client, self.embed_client, embed_api_base = _make_client()
-        
+        # Cliente GROQ para geração
+        self.llm_client = _make_llm_client()
         self.llm_model = llm_model or os.environ.get("LLM_MODEL", "llama-3.3-70b-versatile")
-        self.embed_model = embed_model or os.environ.get("EMBED_MODEL", "text-embedding-3-small")
-
-        # Configura função de embedding (OpenAI ou Gemini)
-        embed_kwargs: dict[str, Any] = {
-            "api_key": os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY"),
-            "model_name": self.embed_model,
-        }
-        if embed_api_base:
-            embed_kwargs["api_base"] = embed_api_base
         
-        # IMPORTANTE: Usa OpenAIEmbeddingFunction, NÃO SentenceTransformer
-        self.embed_fn = OpenAIEmbeddingFunction(**embed_kwargs)
+        # Embedding model local
+        self.embed_model_name = embed_model or os.environ.get(
+            "EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
+        )
+        self.embed_fn = LocalEmbeddingFunction(model_name=self.embed_model_name)
 
         self.corpus_dir = Path(corpus_dir)
         self.persist_dir = persist_dir
@@ -92,24 +109,9 @@ class RAGPipeline:
 
         chroma = chromadb.PersistentClient(path=persist_dir)
         self.collection = chroma.get_or_create_collection(
-            name=collection_name, embedding_function=self.embed_fn
+            name=collection_name,
+            embedding_function=self.embed_fn,
         )
-
-    def _embed_texts_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embedda textos em lotes seguros para evitar BadRequestError."""
-        embeddings: list[list[float]] = []
-        batch_size = 50  # Seguro para OpenAI/Gemini
-        
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
-            response = self.embed_client.embeddings.create(
-                model=self.embed_model,
-                input=batch,
-            )
-            embeddings.extend([d.embedding for d in response.data])
-            if i + batch_size < len(texts):
-                time.sleep(1.0)  # Respeita rate limit
-        return embeddings
 
     def ingest_and_index(self) -> int:
         """Le PDFs de `corpus_dir`, faz chunking e indexa em Chroma."""
@@ -147,22 +149,31 @@ class RAGPipeline:
                 })
         print(f"✂️  Gerados {len(chunks)} chunks (size=800, overlap=100).")
 
-        # TODO 1.C — Embedding manual + indexação no Chroma
+        # TODO 1.C — Indexação no Chroma (embeddings gerados localmente)
         if chunks:
             ids = [c["id"] for c in chunks]
             documents = [c["text"] for c in chunks]
             metadatas = [{"source": c["source"], "page": c["page"]} for c in chunks]
             
-            print("🔢 Gerando embeddings em lotes seguros...")
-            embeddings = self._embed_texts_batch(documents)
+            print("🔢 Gerando embeddings localmente (pode demorar 1-2 min na primeira vez)...")
+            start_time = time.time()
             
-            self.collection.add(
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas,
-                embeddings=embeddings,
-            )
-            print(f"💾 Total indexados: {len(chunks)} chunks na collection '{self.collection_name}'.")
+            # Chroma chama automaticamente self.embed_fn internamente
+            BATCH_SIZE = 100
+            for i in range(0, len(chunks), BATCH_SIZE):
+                batch_ids = ids[i:i + BATCH_SIZE]
+                batch_docs = documents[i:i + BATCH_SIZE]
+                batch_metas = metadatas[i:i + BATCH_SIZE]
+                
+                self.collection.add(
+                    ids=batch_ids,
+                    documents=batch_docs,
+                    metadatas=batch_metas,
+                )
+                print(f"  📦 Batch {(i // BATCH_SIZE) + 1}: {len(batch_ids)} chunks indexados")
+            
+            elapsed = time.time() - start_time
+            print(f"💾 Total indexados: {len(chunks)} chunks em {elapsed:.1f}s")
 
         return self.collection.count()
 
@@ -203,11 +214,13 @@ class RAGPipeline:
 
         prompt = PROMPT_TEMPLATE.format(context=context, question=question)
 
-        # Usa GROQ para geração
         response = self.llm_client.chat.completions.create(
             model=self.llm_model,
             messages=[
-                {"role": "system", "content": "Você é um assistente técnico que responde APENAS com base no contexto fornecido."},
+                {
+                    "role": "system",
+                    "content": "Você é um assistente técnico especialista em LGPD. Responda APENAS com base no contexto fornecido. Cite os artigos da lei quando relevante.",
+                },
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,
@@ -218,7 +231,7 @@ class RAGPipeline:
         return {"answer": answer, "sources": sources}
 
 
-PROMPT_TEMPLATE = """Voce e um assistente tecnico. Responda APENAS com base no contexto abaixo.
+PROMPT_TEMPLATE = """Voce e um assistente tecnico especialista em LGPD. Responda APENAS com base no contexto abaixo.
 Se a informacao nao estiver no contexto, diga "Nao encontrado no corpus".
 Sempre cite a fonte usando o formato [arquivo:pagina].
 
