@@ -21,7 +21,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 def _make_client() -> tuple[OpenAI, OpenAI, str | None]:
     """
     Retorna (llm_client, embed_client, embed_api_base).
-    
     - GROQ para LLM (llama-3.3-70b-versatile)
     - OpenAI para embeddings (text-embedding-3-small)
     """
@@ -84,6 +83,7 @@ class RAGPipeline:
         if embed_api_base:
             embed_kwargs["api_base"] = embed_api_base
         
+        # IMPORTANTE: Usa OpenAIEmbeddingFunction, NÃO SentenceTransformer
         self.embed_fn = OpenAIEmbeddingFunction(**embed_kwargs)
 
         self.corpus_dir = Path(corpus_dir)
