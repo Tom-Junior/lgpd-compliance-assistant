@@ -87,7 +87,7 @@ class RAGPipeline:
                         "text": text,
                         "source": pdf_path.name,
                         "page": page_num,
-                    })
+                })
         print(f"📚 Ingeridos {len(docs)} documentos de {len(list(self.corpus_dir.glob('*.pdf')))} PDFs.")
 
 
@@ -97,11 +97,10 @@ class RAGPipeline:
         # {"id": unique_id, "text": str, "source": str, "page": int}
         # Dica: reaproveite o notebook 02 (Etapa 2 — Chunking Recursivo).
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=800,
-            chunk_overlap=100,
-            separators=["\n\n", "\n", ". ", " ", ""],
+        chunk_size=800,
+        chunk_overlap=100,
+        separators=["\n\n", "\n", ". ", " ", ""],
         )
-        
         chunks: list[dict] = []
         for doc in docs:
             splits = splitter.split_text(doc["text"])
@@ -119,12 +118,28 @@ class RAGPipeline:
         # Adicionar chunks no Chroma via self.collection.add(ids=, documents=, metadatas=)
         # Lembre de filtrar metadatas para conter apenas {source, page} (Chroma rejeita listas).
 
+        # TODO 1.C — Adicionar chunks no Chroma EM LOTES (limite Gemini: 100/batch)
         if chunks:
+            BATCH_SIZE = 80  # margem de segurança abaixo do limite de 100 do Gemini
             ids = [c["id"] for c in chunks]
             documents = [c["text"] for c in chunks]
             metadatas = [{"source": c["source"], "page": c["page"]} for c in chunks]
-            self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
-            print(f"💾 Indexados {len(chunks)} chunks na collection '{self.collection_name}'.")
+    
+            total_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
+            for i in range(0, len(chunks), BATCH_SIZE):
+                batch_num = (i // BATCH_SIZE) + 1
+                batch_ids = ids[i:i + BATCH_SIZE]
+                batch_docs = documents[i:i + BATCH_SIZE]
+                batch_metas = metadatas[i:i + BATCH_SIZE]
+                
+                self.collection.add(
+                    ids=batch_ids,
+                    documents=batch_docs,
+                    metadatas=batch_metas,
+                )
+                print(f"  📦 Batch {batch_num}/{total_batches}: {len(batch_ids)} chunks indexados")
+    
+            print(f"💾 Total indexados: {len(chunks)} chunks na collection '{self.collection_name}'.")
 
         return self.collection.count()
 
