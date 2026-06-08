@@ -1,0 +1,40 @@
+[project]
+name = "lgpd-compliance-assistant"
+version = "1.0.0"
+description = "Assistente de Compliance LGPD com RAG, Tool-use e Cache Semântico"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0",
+    "chromadb>=0.5",
+    "pypdf>=4.0",
+    "langchain-text-splitters>=0.2",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "streamlit>=1.30",
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "langchain>=0.2",
+    "langchain-openai>=0.1",
+    "langchain-community>=0.2",
+    "sentence-transformers>=2.7",
+    "streamlit>=1.35",
+    "ragas>=0.1.9",
+    "tiktoken>=0.7",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "nbval>=0.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+# Placeholders intencionais para o aluno preencher (TODOs do projeto)
+"src/pipeline/*.py" = ["F821", "F841"]

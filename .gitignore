@@ -1,0 +1,33 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Dados e cache
+data/chroma/
+data/cache/
+chroma_db/
+.cache/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Eval results — descomente para versionar
+# evals/results-*.json
+.env
+data/chroma/
