@@ -15,17 +15,34 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 def _make_client() -> tuple[OpenAI, str | None]:
     """Inicializa cliente OpenAI-compatible conforme provider escolhido no .env."""
-    if "GEMINI_API_KEY" in os.environ:
+    
+    # GROQ (prioridade)
+    if "GROQ_API_KEY" in os.environ:
+        client = OpenAI(
+            api_key=os.environ["GROQ_API_KEY"],
+            base_url="https://api.groq.com/openai/v1",
+        )
+        embed_api_base = None  # GROQ não tem embeddings ainda, usaremos OpenAI
+        print("🚀 Usando GROQ como LLM provider")
+    
+    # GEMINI (fallback)
+    elif "GEMINI_API_KEY" in os.environ:
         client = OpenAI(
             api_key=os.environ["GEMINI_API_KEY"],
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
         embed_api_base = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        print("💎 Usando Gemini como LLM provider")
+    
+    # OPENAI (fallback final)
     elif "OPENAI_API_KEY" in os.environ:
         client = OpenAI()
         embed_api_base = None
+        print("🤖 Usando OpenAI como LLM provider")
+    
     else:
-        raise RuntimeError("Configure GEMINI_API_KEY ou OPENAI_API_KEY no .env")
+        raise RuntimeError("Configure GROQ_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY no .env")
+    
     return client, embed_api_base
 
 
@@ -41,16 +58,16 @@ class RAGPipeline:
         embed_model: str | None = None,
     ) -> None:
         self.client, embed_api_base = _make_client()
-        self.llm_model = llm_model or os.environ.get("LLM_MODEL", "gemini-2.5-flash-lite")
-        self.embed_model = embed_model or os.environ.get("EMBED_MODEL", "gemini-embedding-001")
+        self.llm_model = llm_model or os.environ.get("LLM_MODEL", "llama-3.3-70b-versatile")
+        self.embed_model = embed_model or os.environ.get("EMBED_MODEL", "all-minilm-L6-v2")
 
         embed_kwargs: dict[str, Any] = {
-            "api_key": os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+            "api_key": os.environ.get("GROQ_API_KEY") or os.environ.get("OPENAI_API_KEY"),
             "model_name": self.embed_model,
         }
         if embed_api_base:
             embed_kwargs["api_base"] = embed_api_base
-        self.embed_fn = OpenAIEmbeddingFunction(**embed_kwargs)
+        self.embed_fn = SentenceTransformerEmbeddingFunction(**embed_kwargs)
 
         self.corpus_dir = Path(corpus_dir)
         self.persist_dir = persist_dir
