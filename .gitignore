@@ -31,3 +31,4 @@ Thumbs.db
 # evals/results-*.json
 .env
 data/chroma/
+data/chroma/
