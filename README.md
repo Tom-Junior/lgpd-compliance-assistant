@@ -85,19 +85,19 @@ Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado. �
 3-5 bullets explicando decisoes NAO obvias:
 
 - Por que cite_article como tool customizada?
->- LLMs tendem a alucinar números de artigos (ex: inventar "Art. 42" quando o correto é "Art. 7"). A tool parseia o PDF da LGPD e retorna o texto integral do artigo solicitado, eliminando esse risco. Testei sem a tool e o LLM inventou artigos em 23% das respostas sobre bases legais.
+> LLMs tendem a alucinar números de artigos (ex: inventar "Art. 42" quando o correto é "Art. 7"). A tool parseia o PDF da LGPD e retorna o texto integral do artigo solicitado, eliminando esse risco. Testei sem a tool e o LLM inventou artigos em 23% das respostas sobre bases legais.
 
 - Por que chunk_size=800 com overlap=100?
->- Testei 400, 800, 1200 e 1600. Com 400, perdia contexto de artigos longos (ex: Art. 7 tem 10 incisos). Com 1600, a precisão do retrieval caía (chunks muito grandes diluem a semântica). 800 foi o sweet spot: preserva artigos inteiros e mantém precisão de retrieval (context_precision RAGAS: 0.87).
+> Testei 400, 800, 1200 e 1600. Com 400, perdia contexto de artigos longos (ex: Art. 7 tem 10 incisos). Com 1600, a precisão do retrieval caía (chunks muito grandes diluem a semântica). 800 foi o sweet spot: preserva artigos inteiros e mantém precisão de retrieval (context_precision RAGAS: 0.87).
 
 - Por que threshold de cache semântico = 0.93?
->- Testei 0.85, 0.90, 0.93 e 0.95. Com 0.85, o cache retornava respostas para perguntas semanticamente similares mas juridicamente diferentes (ex: "posso armazenar CPF?" vs "posso compartilhar CPF?"). Com 0.95, o hit-rate caía para 12%. 0.93 equilibra precisão e cobertura.
+> Testei 0.85, 0.90, 0.93 e 0.95. Com 0.85, o cache retornava respostas para perguntas semanticamente similares mas juridicamente diferentes (ex: "posso armazenar CPF?" vs "posso compartilhar CPF?"). Com 0.95, o hit-rate caía para 12%. 0.93 equilibra precisão e cobertura.
 
 - Por que heurística simples para routing (vs classifier LLM)?
->- Um classifier LLM adicionaria ~500ms de latência e 0.0001 por query apenas para decidir o modelo. A heurística (tamanho da query + palavras-chave + múltiplas perguntas) classifica com 92% de acordo com um classifier GPT-4o, mas custa zero e adiciona <1ms. Para 50 queries, economizei $0.005 apenas no routing.
+> Um classifier LLM adicionaria ~500ms de latência e 0.0001 por query apenas para decidir o modelo. A heurística (tamanho da query + palavras-chave + múltiplas perguntas) classifica com 92% de acordo com um classifier GPT-4o, mas custa zero e adiciona <1ms. Para 50 queries, economizei $0.005 apenas no routing.
 
 - Por que NÃO incluo re-ranking?
->- O corpus é pequeno (~100 páginas da LGPD + 50 páginas de guias ANPD = ~150 páginas). Com apenas 150 páginas, o retrieval top-5 já captura o contexto relevante (context_recall: 0.89). Re-ranking adicionaria ~800ms de latência sem ganho significativo de qualidade. Se o corpus crescer para >1000 páginas, reconsideraria.
+> O corpus é pequeno (~100 páginas da LGPD + 50 páginas de guias ANPD = ~150 páginas). Com apenas 150 páginas, o retrieval top-5 já captura o contexto relevante (context_recall: 0.89). Re-ranking adicionaria ~800ms de latência sem ganho significativo de qualidade. Se o corpus crescer para >1000 páginas, reconsideraria.
 
 ## Limitations
 
