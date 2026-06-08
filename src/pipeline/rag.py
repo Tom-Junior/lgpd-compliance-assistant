@@ -1,8 +1,13 @@
-"""RAG pipeline — chunk, embed, index, retrieve, generate."""
+"""RAG pipeline — chunk, embed, index, retrieve, generate.
+
+Configuração: GROQ para LLM + OpenAI para embeddings.
+"""
 
 from __future__ import annotations
 
 import os
+import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,37 +18,46 @@ from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-def _make_client() -> tuple[OpenAI, str | None]:
-    """Inicializa cliente OpenAI-compatible conforme provider escolhido no .env."""
+def _make_client() -> tuple[OpenAI, OpenAI, str | None]:
+    """
+    Retorna (llm_client, embed_client, embed_api_base).
     
-    # GROQ (prioridade)
+    - GROQ para LLM (llama-3.3-70b-versatile)
+    - OpenAI para embeddings (text-embedding-3-small)
+    """
+    # Cliente GROQ para LLM
     if "GROQ_API_KEY" in os.environ:
-        client = OpenAI(
+        llm_client = OpenAI(
             api_key=os.environ["GROQ_API_KEY"],
             base_url="https://api.groq.com/openai/v1",
         )
-        embed_api_base = None  # GROQ não tem embeddings ainda, usaremos OpenAI
-        print("🚀 Usando GROQ como LLM provider")
+        print("🚀 GROQ configurado para LLM")
+    else:
+        raise RuntimeError("GROQ_API_KEY não configurada. Adicione no .env ou Streamlit Secrets.")
     
-    # GEMINI (fallback)
+    # Cliente OpenAI para embeddings
+    if "OPENAI_API_KEY" in os.environ:
+        embed_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        embed_api_base = None
+        print("🤖 OpenAI configurado para embeddings")
     elif "GEMINI_API_KEY" in os.environ:
-        client = OpenAI(
+        embed_client = OpenAI(
             api_key=os.environ["GEMINI_API_KEY"],
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
         embed_api_base = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        print("💎 Usando Gemini como LLM provider")
-    
-    # OPENAI (fallback final)
-    elif "OPENAI_API_KEY" in os.environ:
-        client = OpenAI()
-        embed_api_base = None
-        print("🤖 Usando OpenAI como LLM provider")
-    
+        print("💎 Gemini configurado para embeddings (fallback)")
     else:
-        raise RuntimeError("Configure GROQ_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY no .env")
+        raise RuntimeError("OPENAI_API_KEY ou GEMINI_API_KEY necessária para embeddings.")
     
-    return client, embed_api_base
+    return llm_client, embed_client, embed_api_base
+
+
+def _clean_text(text: str) -> str:
+    """Remove caracteres inválidos, null bytes e normaliza espaços."""
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 class RAGPipeline:
@@ -57,17 +71,20 @@ class RAGPipeline:
         llm_model: str | None = None,
         embed_model: str | None = None,
     ) -> None:
-        self.client, embed_api_base = _make_client()
+        self.llm_client, self.embed_client, embed_api_base = _make_client()
+        
         self.llm_model = llm_model or os.environ.get("LLM_MODEL", "llama-3.3-70b-versatile")
-        self.embed_model = embed_model or os.environ.get("EMBED_MODEL", "all-minilm-L6-v2")
+        self.embed_model = embed_model or os.environ.get("EMBED_MODEL", "text-embedding-3-small")
 
+        # Configura função de embedding (OpenAI ou Gemini)
         embed_kwargs: dict[str, Any] = {
-            "api_key": os.environ.get("GROQ_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+            "api_key": os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY"),
             "model_name": self.embed_model,
         }
         if embed_api_base:
             embed_kwargs["api_base"] = embed_api_base
-        self.embed_fn = SentenceTransformerEmbeddingFunction(**embed_kwargs)
+        
+        self.embed_fn = OpenAIEmbeddingFunction(**embed_kwargs)
 
         self.corpus_dir = Path(corpus_dir)
         self.persist_dir = persist_dir
@@ -78,27 +95,40 @@ class RAGPipeline:
             name=collection_name, embedding_function=self.embed_fn
         )
 
+    def _embed_texts_batch(self, texts: list[str]) -> list[list[float]]:
+        """Embedda textos em lotes seguros para evitar BadRequestError."""
+        embeddings: list[list[float]] = []
+        batch_size = 50  # Seguro para OpenAI/Gemini
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            response = self.embed_client.embeddings.create(
+                model=self.embed_model,
+                input=batch,
+            )
+            embeddings.extend([d.embedding for d in response.data])
+            if i + batch_size < len(texts):
+                time.sleep(1.0)  # Respeita rate limit
+        return embeddings
+
     def ingest_and_index(self) -> int:
         """Le PDFs de `corpus_dir`, faz chunking e indexa em Chroma."""
-        # 1. Ingestão de PDFs
+        # TODO 1.A — Ingestão de PDFs
         docs: list[dict] = []
         for pdf_path in sorted(self.corpus_dir.glob("*.pdf")):
-            try:
-                reader = PdfReader(str(pdf_path))
-                for page_num, page in enumerate(reader.pages, start=1):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        docs.append({
-                            "text": text,
-                            "source": pdf_path.name,
-                            "page": page_num,
-                        })
-            except Exception as e:
-                print(f"⚠️ Erro ao ler {pdf_path.name}: {e}")
-        
-        print(f"📚 Ingeridos {len(docs)} documentos de {len(list(self.corpus_dir.glob('*.pdf')))} PDFs.")
+            reader = PdfReader(str(pdf_path))
+            for page_num, page in enumerate(reader.pages, start=1):
+                text = page.extract_text()
+                cleaned = _clean_text(text) if text else ""
+                if cleaned and len(cleaned) > 50:
+                    docs.append({
+                        "text": cleaned,
+                        "source": pdf_path.name,
+                        "page": page_num,
+                    })
+        print(f"📚 Ingeridos {len(docs)} documentos válidos de {len(list(self.corpus_dir.glob('*.pdf')))} PDFs.")
 
-        # 2. Chunking recursivo
+        # TODO 1.B — Chunking recursivo
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=800,
             chunk_overlap=100,
@@ -108,44 +138,31 @@ class RAGPipeline:
         for doc in docs:
             splits = splitter.split_text(doc["text"])
             for chunk_idx, chunk_text in enumerate(splits):
-                if not chunk_text.strip():
-                    continue # Pula chunks vazios
                 unique_id = f"{doc['source']}_p{doc['page']}_c{chunk_idx}"
                 chunks.append({
                     "id": unique_id,
-                    "text": chunk_text,
+                    "text": _clean_text(chunk_text),
                     "source": doc["source"],
                     "page": doc["page"],
                 })
-        print(f"✂️ Gerados {len(chunks)} chunks válidos.")
+        print(f"✂️  Gerados {len(chunks)} chunks (size=800, overlap=100).")
 
-        # 3. Indexação no Chroma EM LOTES (Seguro para limite de 100 do Gemini)
+        # TODO 1.C — Embedding manual + indexação no Chroma
         if chunks:
-            BATCH_SIZE = 50  # Bem abaixo do limite de 100 para segurança total
             ids = [c["id"] for c in chunks]
             documents = [c["text"] for c in chunks]
             metadatas = [{"source": c["source"], "page": c["page"]} for c in chunks]
             
-            total_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
+            print("🔢 Gerando embeddings em lotes seguros...")
+            embeddings = self._embed_texts_batch(documents)
             
-            for i in range(0, len(chunks), BATCH_SIZE):
-                batch_num = (i // BATCH_SIZE) + 1
-                batch_ids = ids[i:i + BATCH_SIZE]
-                batch_docs = documents[i:i + BATCH_SIZE]
-                batch_metas = metadatas[i:i + BATCH_SIZE]
-                
-                try:
-                    self.collection.add(
-                        ids=batch_ids,
-                        documents=batch_docs,
-                        metadatas=batch_metas,
-                    )
-                    print(f"  📦 Batch {batch_num}/{total_batches}: {len(batch_ids)} chunks indexados.")
-                except Exception as e:
-                    print(f"  ⚠️ Erro no batch {batch_num}: {e}")
-                    # Continua para o próximo batch em vez de quebrar o app inteiro
-            
-            print(f"💾 Total indexados: {self.collection.count()} chunks na collection '{self.collection_name}'.")
+            self.collection.add(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas,
+                embeddings=embeddings,
+            )
+            print(f"💾 Total indexados: {len(chunks)} chunks na collection '{self.collection_name}'.")
 
         return self.collection.count()
 
@@ -168,6 +185,7 @@ class RAGPipeline:
                     "page": metadata.get("page", 0),
                     "distance": distance,
                 })
+        
         return hits
 
     def answer(self, question: str, k: int = 5) -> dict:
@@ -185,7 +203,8 @@ class RAGPipeline:
 
         prompt = PROMPT_TEMPLATE.format(context=context, question=question)
 
-        response = self.client.chat.completions.create(
+        # Usa GROQ para geração
+        response = self.llm_client.chat.completions.create(
             model=self.llm_model,
             messages=[
                 {"role": "system", "content": "Você é um assistente técnico que responde APENAS com base no contexto fornecido."},
