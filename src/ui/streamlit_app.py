@@ -177,7 +177,7 @@ if query:
 
 
 st.divider()
-st.caption(
+st.caption("""
     ### Sobre este assistente
 
 Este assistente responde perguntas sobre conformidade com a **Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018)**, citando artigos específicos da lei e evitando alucinações.
@@ -197,4 +197,4 @@ Este assistente responde perguntas sobre conformidade com a **Lei Geral de Prote
 - Corpus estático (LGPD não é atualizada automaticamente)
 - Não substitui consultoria jurídica especializada
 - Funciona apenas em português
-)
+""")
