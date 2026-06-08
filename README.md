@@ -179,8 +179,9 @@ Veja `projeto-portfolio.pdf` (briefing do projeto) para a rubrica 3-bandas compl
 
 ---
 
-*Projeto desenvolvido para a disciplina "Desenvolvendo Software com IA Generativa" (Mod4 PPI).
+*Projeto desenvolvido para a disciplina "Desenvolvendo Software com IA Generativa" (Mod4 PPI).*
+
 ```
-*Corpus: Lei 13.709/2018 (LGPD) + Guias da ANPD.*
-*Autor: @Tom-Junior - ribeiro.junior@alu.ufc.br.*
+Corpus: Lei 13.709/2018 (LGPD) + Guias da ANPD.
+Autor: @Tom-Junior - ribeiro.junior@alu.ufc.br.
 ```
