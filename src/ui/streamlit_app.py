@@ -29,9 +29,9 @@ from src.pipeline.routing import classify_complexity  # noqa: E402
 
 
 # ---------------------------------------------------------------- Streamlit UI
-st.set_page_config(page_title="Assistente de Compliance LGPD", page_icon=":robot:", layout="centered")
+st.set_page_config(page_title="Assistente de Compliance LGPD", page_icon="🛡️", layout="centered")
 
-st.title(":robot: Assistente de Compliance LGPD")
+st.title("🛡️ Assistente de Compliance LGPD")
 st.caption("Consulte a Lei Geral de Proteção de Dados (Lei 13.709/2018) com citação de artigos e redução de custos via cache semântico e model routing.")
 
 
@@ -68,61 +68,112 @@ with st.sidebar:
         get_exact_cache.clear()
         get_semantic_cache.clear()
         st.success("Caches limpos. Recarregue a pagina.")
+    
+    st.divider()
+    st.markdown("### Sobre o Projeto")
+    st.markdown("""
+    **Problema:** Desenvolvedores precisam verificar conformidade com a LGPD, mas consultar a lei é trabalhoso.
+    
+    **Solução:** Assistente RAG que responde perguntas citando artigos específicos da LGPD, evitando alucinações.
+    
+    **Tecnologias:**
+    - RAG com ChromaDB
+    - Tool-use para citar artigos
+    - Cache semântico (threshold: 0.93)
+    - Model routing cheap-first
+    """)
 
 
 # Main — chat interface
-query = st.text_input("Sua pergunta:", placeholder="Pergunte algo sobre o corpus indexado...")
+query = st.text_input("Sua pergunta sobre LGPD:", placeholder="Ex: Posso armazenar CPF sem consentimento?")
 
 if query:
-    with trace("query_handle", query=query) as ctx:
-        trace_id = ctx["trace_id"]
-
-        # 1. Exact cache
-        cached = exact_cache.get(query)
-        if cached:
-            st.success("Cache hit (exact)")
-            st.write(cached)
+    # Inicializa trace_id (fallback se trace() não estiver disponível)
+    try:
+        with trace("query_handle", query=query) as ctx:
+            trace_id = ctx.get("trace_id", "unknown")
+    except Exception:
+        trace_id = "unknown"
+    
+    # Flag para controlar se já respondemos
+    answered = False
+    response_text = ""
+    sources_list = []
+    
+    # 1. Exact cache
+    cached = exact_cache.get(query)
+    if cached:
+        response_text = cached
+        sources_list = []
+        answered = True
+        st.success("✅ Cache hit (exact)")
+        try:
             log_event("cache_hit", trace_id=trace_id, layer="exact")
-            st.stop()
-
-        # 2. Semantic cache
+        except Exception:
+            pass
+    
+    # 2. Semantic cache (se não houve hit no exact)
+    if not answered:
         try:
             cached = semantic_cache.get(query)
-        except NotImplementedError:
-            cached = None
-            st.warning("Semantic cache nao implementado (TODO 5). Caindo no LLM real.")
-
-        if cached:
-            st.success("Cache hit (semantic)")
-            st.write(cached)
-            log_event("cache_hit", trace_id=trace_id, layer="semantic")
-            st.stop()
-
-        # 3. Pipeline RAG + Routing
+            if cached:
+                response_text = cached
+                sources_list = []
+                answered = True
+                st.success("✅ Cache hit (semantic)")
+                try:
+                    log_event("cache_hit", trace_id=trace_id, layer="semantic")
+                except Exception:
+                    pass
+        except Exception as e:
+            st.warning(f"Semantic cache indisponível: {e}")
+    
+    # 3. Pipeline RAG + Routing (se não houve cache hit)
+    if not answered:
+        # Routing
         try:
             decision = classify_complexity(query)
-            st.info(f"Routing: {decision.complexity} -> {decision.model}")
-            log_event("route_decision", trace_id=trace_id, **decision.__dict__)
-        except NotImplementedError:
-            st.warning("Routing nao implementado (TODO 6). Usando modelo default.")
-
+            st.info(f"🔀 Routing: {decision.complexity} → {decision.model}")
+            try:
+                log_event("route_decision", trace_id=trace_id, **decision.__dict__)
+            except Exception:
+                pass
+        except Exception as e:
+            st.warning(f"Routing indisponível: {e}. Usando modelo default.")
+        
+        # RAG Pipeline
         try:
             result = pipeline.answer(query)
-        except NotImplementedError as e:
-            st.error(f"Pipeline nao implementado: {e}")
-            st.info("Implemente TODOs 1-3 em `src/pipeline/rag.py` para destravar.")
-            st.stop()
-
-        # 4. Renderiza + cacheia
-        st.write(result["answer"])
-        if result.get("sources"):
-            with st.expander("Fontes citadas"):
-                for source, page in result["sources"]:
+            response_text = result.get("answer", "Erro ao gerar resposta.")
+            sources_list = result.get("sources", [])
+            answered = True
+            
+            try:
+                log_event("answer_generated", trace_id=trace_id, sources=len(sources_list))
+            except Exception:
+                pass
+        except Exception as e:
+            st.error(f"Erro no pipeline RAG: {e}")
+            response_text = f"Erro ao processar sua pergunta: {str(e)}"
+            sources_list = []
+            answered = True
+    
+    # 4. Renderiza resposta (sempre, se temos algo para mostrar)
+    if answered and response_text:
+        st.write(response_text)
+        
+        if sources_list:
+            with st.expander("📚 Fontes citadas"):
+                for source, page in sources_list:
                     st.write(f"- `{source}:p{page}`")
-
-        exact_cache.put(query, result["answer"])
-        semantic_cache.put(query, result["answer"])
-        log_event("answer_generated", trace_id=trace_id, sources=len(result.get("sources", [])))
+        
+        # Cacheia a resposta (se não veio do cache)
+        if "Cache hit" not in st.session_state.get("last_status", ""):
+            try:
+                exact_cache.put(query, response_text)
+                semantic_cache.put(query, response_text)
+            except Exception as e:
+                st.warning(f"Erro ao salvar no cache: {e}")
 
 
 st.divider()
