@@ -104,16 +104,16 @@ Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado. �
 3-5 bullets honestos:
 
 - Corpus estático e limitado:
->- O corpus atual contém apenas a LGPD (Lei 13.709/2018) e alguns guias da ANPD (~150 páginas). Não cobre outras regulamentações relacionadas (ex: Marco Civil da Internet, Código de Defesa do Consumidor, resoluções do BACEN sobre privacidade). Se o usuário perguntar sobre interseção de leis, o assistente não terá contexto suficiente.
+> O corpus atual contém apenas a LGPD (Lei 13.709/2018) e alguns guias da ANPD (~150 páginas). Não cobre outras regulamentações relacionadas (ex: Marco Civil da Internet, Código de Defesa do Consumidor, resoluções do BACEN sobre privacidade). Se o usuário perguntar sobre interseção de leis, o assistente não terá contexto suficiente.
 
 - Free tier do Gemini limita a 15 RPM:
->- A demo pública pode enfrentar rate limiting se múltiplos usuários acessarem simultaneamente. Em produção, seria necessário upgrade para plano pago ou implementação de fila de requests. Durante testes, observei 3 erros de rate limit em 50 queries (6% de falha).
+> A demo pública pode enfrentar rate limiting se múltiplos usuários acessarem simultaneamente. Em produção, seria necessário upgrade para plano pago ou implementação de fila de requests. Durante testes, observei 3 erros de rate limit em 50 queries (6% de falha).
 
--Não suporta upload de PDF do usuário:
->- O corpus é fixo (LGPD + ANPD). Se o usuário quiser consultar um contrato específico ou política de privacidade da sua empresa, não é possível. Seria necessário implementar ingestão dinâmica de PDFs com validação de segurança (sandboxing, limite de tamanho, etc).
+- Não suporta upload de PDF do usuário:
+> O corpus é fixo (LGPD + ANPD). Se o usuário quiser consultar um contrato específico ou política de privacidade da sua empresa, não é possível. Seria necessário implementar ingestão dinâmica de PDFs com validação de segurança (sandboxing, limite de tamanho, etc).
 
 - Interpretação jurídica limitada:
->- O assistente cita artigos da lei, mas não substitui consultoria jurídica especializada. Para casos complexos (ex: transferência internacional de dados, análise de impacto à proteção de dados - AIPD), a resposta do LLM deve ser validada por um advogado.
+> O assistente cita artigos da lei, mas não substitui consultoria jurídica especializada. Para casos complexos (ex: transferência internacional de dados, análise de impacto à proteção de dados - AIPD), a resposta do LLM deve ser validada por um advogado.
 
 ## Tech stack
 
