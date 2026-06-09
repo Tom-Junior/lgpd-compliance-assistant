@@ -2,9 +2,9 @@
 
 > Assistente LLM-powered que responde perguntas sobre conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018), citando o artigo exato da lei para evitar alucinações, com RAG ponta-a-ponta, cache semântico e model routing cheap-first.
 
-<!-- TODO: cole aqui o GIF de demo (10-15s, <5MB) gerado com peek/terminalizer/OBS -->
+![Demo do Assistente LGPD](docs/demo.gif)
 
-**Live demo:** TODO — substitua pelo link do Streamlit Cloud / HuggingFace Spaces / FastAPI
+**Live demo:** [https://lgpd-compliance-assistant.streamlit.app](https://lgpd-compliance-assistant.streamlit.app)
 
 ## Problem statement
 
