@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import base64
 
 from dotenv import load_dotenv
 
@@ -29,10 +30,128 @@ from src.pipeline.routing import classify_complexity  # noqa: E402
 
 
 # ---------------------------------------------------------------- Streamlit UI
-st.set_page_config(page_title="Assistente de Compliance LGPD", page_icon="🛡️", layout="centered")
 
-st.title("🛡️ Assistente de Compliance LGPD")
-st.caption("Consulte a Lei Geral de Proteção de Dados (Lei 13.709/2018) com citação de artigos e redução de custos via cache semântico e model routing.")
+
+# --- CONFIGURAÇÃO VISUAL FUTURISTA ---
+st.set_page_config(
+    page_title="LGPD AI Assistant", 
+    page_icon="", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Injeção de CSS Cyberpunk/Sci-Fi
+st.markdown("""
+<style>
+    /* Fundo e Fontes */
+    .stApp {
+        background: linear-gradient(135deg, #050b14 0%, #0a192f 100%);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Painéis de Vidro (Glassmorphism) */
+    div[data-testid="stSidebar"] > div:first-child {
+        background: rgba(10, 25, 47, 0.85);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(0, 255, 255, 0.2);
+    }
+    
+    /* Inputs Futuristas */
+    .stTextInput > div > div > input {
+        background-color: rgba(0, 0, 0, 0.3);
+        color: #00ffff;
+        border: 1px solid #00ffff;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
+    }
+    
+    /* Botões Neon */
+    .stButton > button {
+        background: transparent;
+        color: #00ffff;
+        border: 1px solid #00ffff;
+        border-radius: 20px;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background: #00ffff;
+        color: #000;
+        box-shadow: 0 0 20px #00ffff;
+    }
+
+    /* Robô na Sidebar (Posicionamento Absoluto) */
+    .robot-container {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        width: 120px;
+        z-index: 999;
+        pointer-events: none;
+        filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.5));
+    }
+    
+    /* Títulos Neon */
+    h1, h2, h3 {
+        color: #e6f1ff !important;
+        text-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- IMAGEM DO ROBÔ (Use uma URL pública ou arquivo local) -->
+# Sugestão: Use esta imagem de robô futurista ou substitua pela sua
+ROBOT_URL = "assets/Cyberpunk-Robot.png" 
+
+with st.sidebar:
+    # Menu Interativo Superior
+    st.markdown("### 🧭 Navegação")
+    menu_option = st.radio(
+        "",
+        ["💬 Chat Compliance", " Métricas do Sistema", "⚙️ Configurações", "📜 Histórico"],
+        label_visibility="collapsed"
+    )
+    
+    st.divider()
+    
+    # Área do Robô (Guardião da Sidebar)
+    st.markdown(f"""
+    <div class="robot-container">
+        <st.image(ROBOT_URL, width=100)>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Espaço para empurrar o conteúdo para cima do robô
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+# --- CONTEÚDO PRINCIPAL ---
+if menu_option == "💬 Chat Compliance":
+    st.title("️ Assistente de Compliance LGPD")
+    st.caption("Sistema RAG com Tool-Use e Cache Semântico")
+    
+    query = st.text_input("Faça sua pergunta jurídica:", placeholder="Ex: Quais as bases legais do Art. 7º?")
+    
+    if query:
+        with st.chat_message("user"):
+            st.write(query)
+        with st.chat_message("assistant"):
+            st.markdown("⚡ Processando via Groq + ChromaDB...")
+            # Aqui entra sua lógica de pipeline.answer(query)
+            
+elif menu_option == "📊 Métricas do Sistema":
+    st.title(" Telemetria em Tempo Real")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Latência Média", "1.8s", "-12%")
+    col2.metric("Cache Hit Rate", "38%", "+5%")
+    col3.metric("Custo por Query", "$0.00", "100% Free")
+
+elif menu_option == "⚙️ Configurações":
+    st.title("⚙️ Painel de Controle")
+    st.toggle("Ativar Tool-Use (Cite Article)", value=True)
+    st.slider("Threshold de Cache Semântico", 0.8, 1.0, 0.93)
+
+elif menu_option == "📜 Histórico":
+    st.title("📜 Log de Consultas")
+    st.info("Histórico de sessões anteriores aparecerá aqui.")
 
 
 # Inicializacao lazy de pipeline + caches

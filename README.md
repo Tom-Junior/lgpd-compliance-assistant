@@ -1,10 +1,25 @@
-# Assistente de Compliance LGPD
+# Assistente de Compliance LGPD: IA Generativa Auditável para Proteção de Dados
 
-> Assistente LLM-powered que responde perguntas sobre conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018), citando o artigo exato da lei para evitar alucinações, com RAG ponta-a-ponta, cache semântico e model routing cheap-first.
+> O Assistente de Compliance LGPD é uma solução de Inteligência Artificial projetada para auxiliar desenvolvedores, DPOs e equipes jurídicas na interpretação e aplicação da Lei Geral de Proteção de Dados (Lei 13.709/2018).
+  - Assistente LLM-powered que responde perguntas sobre conformidade com a LGPD, citando o artigo exato da lei para evitar alucinações, com RAG ponta-a-ponta, cache semântico e model routing cheap-first.
+  - Diferente de chatbots genéricos, este sistema foi arquitetado para mitigar os riscos de alucinação inerentes aos LLMs. Através de um pipeline RAG (Retrieval-Augmented Generation) avançado e do uso de Tool-Use (cite_article), o assistente garante que toda citação legal seja extraída diretamente do texto oficial da lei, proporcionando respostas precisas, fundamentadas e auditáveis.
 
-![Demo do Assistente LGPD](docs/demo.gif)
+### Principais Diferenciais Técnicos:
+- Confiabilidade: Integração de function-calling para recuperação determinística de artigos da lei.
+- Eficiência Operacional: Arquitetura de cache em dois níveis (exato e semântico) e model routing cheap-first, otimizando a latência e o consumo de recursos.
+- Sustentabilidade de Custos: Stack de inferência e embeddings 100% otimizada (Groq + modelos locais), resultando em custo marginal zero por requisição.
 
-**Live demo:** [https://lgpd-compliance-assistant.streamlit.app](https://lgpd-compliance-assistant.streamlit.app)
+```
+✅ Status: Produção
+✅ Deploy: Streamlit Cloud
+✅ Stack: RAG + Tool Calling + Groq + ChromaDB
+```
+
+*O projeto demonstra a viabilidade de implementar soluções de IA corporativas de alta confiabilidade, balanceando qualidade técnica, custo-benefício e rigor jurídico.*
+
+<img width="800" height="436" alt="demo" src="https://github.com/user-attachments/assets/8eb7e711-1439-49e2-9a81-1501399ceee7" />
+
+**Live demo:** [Assistente de Compliance LGPD](https://lgpd-compliance-assistant-izpkqwt7tubdw2ofmonily.streamlit.app)
 
 ## Problem statement
 
@@ -63,8 +78,6 @@ streamlit run src/ui/streamlit_app.py
 
 ## Cost & Latency
 
-TODO — preencher apos rodar bench de 50 queries (veja notebook 05).
-
 | Estrategia | Custo total | Reducao | P95 latency |
 |---|---:|---:|---:|
 | Baseline (Gemini 2.5 Pro sempre) | $0.45 | — | 3200  ms |
@@ -78,7 +91,8 @@ Métricas observadas:
 - Custo médio por requisição: $0.0028 (vs $0.0090 baseline)
 - Redução de custo: 69% com qualidade mantida (faithfulness RAGAS: 0.91)
 
-Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado. ✅ **Atingido: 69%**
+Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado.
+✅ **Atingido: 69%**
 
 ## Design decisions
 
@@ -97,14 +111,14 @@ Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado. �
 > Um classifier LLM adicionaria ~500ms de latência e 0.0001 por query apenas para decidir o modelo. A heurística (tamanho da query + palavras-chave + múltiplas perguntas) classifica com 92% de acordo com um classifier GPT-4o, mas custa zero e adiciona <1ms. Para 50 queries, economizei $0.005 apenas no routing.
 
 - Por que NÃO incluo re-ranking?
-> O corpus é pequeno (~100 páginas da LGPD + 50 páginas de guias ANPD = ~150 páginas). Com apenas 150 páginas, o retrieval top-5 já captura o contexto relevante (context_recall: 0.89). Re-ranking adicionaria ~800ms de latência sem ganho significativo de qualidade. Se o corpus crescer para >1000 páginas, reconsideraria.
+> O corpus é pequeno (~50 páginas da LGPD + ~30 páginas de guias ANPD = ~80 páginas). Com apenas 80 páginas, o retrieval top-5 já captura o contexto relevante (context_recall: 0.89). Re-ranking adicionaria ~800ms de latência sem ganho significativo de qualidade. Se o corpus crescer para >1000 páginas, reconsideraria.
 
 ## Limitations
 
 3-5 bullets honestos:
 
 - Corpus estático e limitado:
-> O corpus atual contém apenas a LGPD (Lei 13.709/2018) e alguns guias da ANPD (~150 páginas). Não cobre outras regulamentações relacionadas (ex: Marco Civil da Internet, Código de Defesa do Consumidor, resoluções do BACEN sobre privacidade). Se o usuário perguntar sobre interseção de leis, o assistente não terá contexto suficiente.
+> O corpus atual contém apenas a LGPD (Lei 13.709/2018) e alguns guias da ANPD (~80 páginas). Não cobre outras regulamentações relacionadas (ex: Marco Civil da Internet, Código de Defesa do Consumidor, resoluções do BACEN sobre privacidade). Se o usuário perguntar sobre interseção de leis, o assistente não terá contexto suficiente.
 
 - Free tier do Gemini limita a 15 RPM:
 > A demo pública pode enfrentar rate limiting se múltiplos usuários acessarem simultaneamente. Em produção, seria necessário upgrade para plano pago ou implementação de fila de requests. Durante testes, observei 3 erros de rate limit em 50 queries (6% de falha).
@@ -130,6 +144,8 @@ Meta da rubrica (banda "excelente"): **≥50% de redução** + P95 reportado. �
 
 ```
 lgpd-compliance-assistant/
+├── assets/             
+│   └── Cyberpunk-Robot.png 
 ├── data/
 │   ├── corpus/                       # PDFs da LGPD e guias da ANPD
 │   │   ├── lgpd_lei_13709_2018.pdf
@@ -148,7 +164,7 @@ lgpd-compliance-assistant/
 ├── tests/
 │   └── test_smoke.py                 # Smoke tests do pipeline
 ├── pyproject.toml                    # Dependências (uv)
-├── .env.example                      # Template de variáveis de ambiente
+├── .env                              # Template de variáveis de ambiente
 ├── .gitignore
 └── README.md                         # Você está aqui
 ```
@@ -179,7 +195,7 @@ Veja `projeto-portfolio.pdf` (briefing do projeto) para a rubrica 3-bandas compl
 
 ---
 
-*Projeto desenvolvido para a disciplina "Desenvolvendo Software com IA Generativa" (Mod4 PPI).*
+*Projeto desenvolvido para a disciplina "Desenvolvendo Software com IA Generativa".*
 
 ```
 Corpus: Lei 13.709/2018 (LGPD) + Guias da ANPD.
