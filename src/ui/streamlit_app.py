@@ -31,8 +31,14 @@ from src.pipeline.routing import classify_complexity  # noqa: E402
 
 # ---------------------------------------------------------------- Streamlit UI
 
-
 # --- CONFIGURAÇÃO VISUAL FUTURISTA ---
+
+# Define o caminho absoluto para a pasta assets (funciona local e na nuvem)
+ROOT_DIR = Path(__file__).resolve().parents[2] 
+ASSETS_DIR = ROOT_DIR / "assets"
+ROBOT_PATH = str(ASSETS_DIR / "cyberpunkrobot.png")
+
+
 st.set_page_config(
     page_title="LGPD AI Assistant", 
     page_icon="", 
@@ -100,27 +106,58 @@ st.markdown("""
 
 # --- IMAGEM DO ROBÔ (Use uma URL pública ou arquivo local) -->
 # Sugestão: Use esta imagem de robô futurista ou substitua pela sua
-ROBOT_URL = "assets/Cyberpunk-Robot.png" 
+import streamlit as st
+from pathlib import Path
 
+# 1. DEFINIÇÃO DE CAMINHOS (No topo do arquivo, após os imports)
+ROOT_DIR = Path(__file__).resolve().parents[2]
+ASSETS_DIR = ROOT_DIR / "assets"
+# Use o nome exato do seu arquivo!
+ROBOT_PATH = str(ASSETS_DIR / "cyberpunkrobot.png") 
+
+# 2. INJEÇÃO DO CSS (Dentro do st.markdown inicial de estilos)
+st.markdown("""
+<style>
+    /* ... seus outros estilos ... */
+
+    /* Robô flutuante na sidebar */
+    .robot-container {
+        position: relative;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+        filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.6));
+        animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 3. LÓGICA DA SIDEBAR (Na seção da sidebar)
 with st.sidebar:
-    # Menu Interativo Superior
     st.markdown("### 🧭 Navegação")
     menu_option = st.radio(
         "",
-        ["💬 Chat Compliance", " Métricas do Sistema", "⚙️ Configurações", "📜 Histórico"],
+        ["💬 Chat Compliance", "📊 Métricas do Sistema", "⚙️ Configurações", "📜 Histórico"],
         label_visibility="collapsed"
     )
     
     st.divider()
     
-    # Área do Robô (Guardião da Sidebar)
-    st.markdown(f"""
-    <div class="robot-container">
-        <st.image(ROBOT_URL, width=100)>
-    </div>
-    """, unsafe_allow_html=True)
+    # Exibe o robô com verificação de existência
+    if Path(ROBOT_PATH).exists():
+        st.markdown('<div class="robot-container">', unsafe_allow_html=True)
+        st.image(ROBOT_PATH, width=120)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.warning(f"⚠️ Imagem não encontrada: {ROBOT_PATH}")
     
-    # Espaço para empurrar o conteúdo para cima do robô
     st.markdown("<br><br>", unsafe_allow_html=True)
 
 # --- CONTEÚDO PRINCIPAL ---
